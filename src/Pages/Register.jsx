@@ -1,35 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import ChatIcon from "../assets/Images/ChatApplicationIcon.jpg";
 import DotsUI from "../Components/DotsUI";
 import { Link } from 'react-router-dom';
-import axios from 'axios';
-import { useDispatch } from 'react-redux';
-import { setUser } from '../Redux/Slices/userSlice';
+import axios from "axios";
 
-function Login() {
+const Register = () => {
 
 
+    const [user, setUser] = useState({
+        name: "",
+        email: "",
+        phone: ""
+    })
     const baseURL = import.meta.env.VITE_API_URL;
-    const [email, setEmail] = useState("");
-    const dispatch = useDispatch();
-
-    const handleLogin = () => {
-        if (email === "") {
-            alert("Please enter email");
+    const registerUser = () => {
+        if (user.name === "" || user.email === "" || user.phone === "") {
+            alert("Please fill all the fields");
         } else {
-            axios.post(`${baseURL}/login`, { email })
+            axios.post(`${baseURL}/register`, user)
                 .then((response) => {
-                    if (response.status === 200) {
-                        setEmail("");
-                        console.log("Data Received"+response.data.data);
-                        dispatch(setUser(response.data.data));
-                        alert("User Logged In Successfully");
+                    if(response.status === 200){
+                        setUser({
+                            name: "",
+                            email: "",
+                            phone: ""
+                        })
+                        alert("User Registered Successfully");
                     }
                 })
                 .catch((error) => {
                     console.log(error);
                 })
-
         }
     }
 
@@ -55,27 +56,41 @@ function Login() {
                 </div>
                 {/* Input Fields */}
                 <input
+                    type="text"
+                    placeholder="Name"
+                    className="w-full p-2 border border-gray-300 rounded mb-3"
+                    onChange={(e) => setUser({ ...user, name: e.target.value })}
+                    value={user.name}
+                />
+                <input
                     type="email"
                     placeholder="Email"
                     className="w-full p-2 border border-gray-300 rounded mb-3"
-                    onChange={(e) => setEmail(e.target.value)}
-                    value={email}
+                    onChange={(e) => setUser({ ...user, email: e.target.value })}
+                    value={user.email}
+                />
+                <input
+                    type="tel"
+                    placeholder="Phone Number"
+                    className="w-full p-2 border border-gray-300 rounded mb-4"
+                    onChange={(e) => setUser({ ...user, phone: e.target.value })}
+                    value={user.phone}
                 />
                 {/* Sign Up Button */}
                 <button
                     className="w-full bg-gray-600 text-white p-2 rounded"
-                    onClick={handleLogin}
-                >Enter Chat</button>
+                    onClick={registerUser}
+                >Sign Up</button>
                 {/* Register Link */}
                 <p className="text-sm text-center text-gray-500 mt-3">
-                    Don't have an account?{" "}
-                    <Link to="/" className="text-blue-600 hover:underline">
-                        Register here
+                    Already have an account?{" "}
+                    <Link to="/Login" className="text-blue-600 hover:underline">
+                        Login
                     </Link>
                 </p>
             </div>
         </div>
-    )
-}
+    );
+};
 
-export default Login
+export default Register;

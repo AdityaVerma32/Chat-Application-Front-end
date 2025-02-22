@@ -28,7 +28,7 @@ function ChatScreen() {
 
 
     return (
-        <div className="flex h-screen bg-[#a7d9f2] p-4">
+        <div className="flex w-full h-full p-4">
             {/* Sidebar */}
             <div className="w-1/4 bg-white flex flex-col">
                 {/* Header Section */}
