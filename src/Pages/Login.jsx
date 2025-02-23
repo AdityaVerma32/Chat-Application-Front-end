@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { useDispatch } from 'react-redux';
 import { setUser } from '../Redux/Slices/userSlice';
+import { useNavigate } from 'react-router-dom';
 
 function Login() {
 
@@ -12,6 +13,7 @@ function Login() {
     const baseURL = import.meta.env.VITE_API_URL;
     const [email, setEmail] = useState("");
     const dispatch = useDispatch();
+    const navigate = useNavigate();
 
     const handleLogin = () => {
         if (email === "") {
@@ -21,9 +23,9 @@ function Login() {
                 .then((response) => {
                     if (response.status === 200) {
                         setEmail("");
-                        console.log("Data Received"+response.data.data);
+                        console.log("Data Received: "+JSON.stringify(response.data.data));
                         dispatch(setUser(response.data.data));
-                        alert("User Logged In Successfully");
+                        navigate("/chat");
                     }
                 })
                 .catch((error) => {

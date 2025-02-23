@@ -1,31 +1,143 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import React from "react";
 import { FaSearch } from "react-icons/fa";
 import { IoSend, IoClose } from "react-icons/io5";
 import ChatIcon from "../assets/Images/ChatApplicationIcon.jpg";
+import { useSelector } from "react-redux";
+import { Client } from "@stomp/stompjs";
+import SockJS from "sockjs-client";
+import { useNavigate } from "react-router";
+import axios from "axios";
+
+
 
 function ChatScreen() {
 
-    const [messages, setMessages] = useState([
-        { sender: "other", text: "OMG do you remember what you did last night at the work night out?", time: "8:12 am" },
-        { sender: "me", text: "no haha", time: "18:16" },
-        { sender: "me", text: "i don’t remember anything", time: "18:16" }
-    ]);
+    const [messages, setMessages] = useState([]);
     const [showUserDetails, setShowUserDetails] = useState(false);
+    const [message, setMessage] = useState("");
+    const [selectedUser, setSelectedUser] = useState(null);
+    const { currentUserName, currentUserEmail, currentUserPhone, currentUserId } = useSelector((state) => state.user);
+    const navigate = useNavigate();
+    const baseURL = import.meta.env.VITE_API_URL;
+    const [users, setUsers] = useState([]);
+    const [stompClient, setStompClient] = useState(null);
+
 
     const toggleUserDetails = () => {
         setShowUserDetails(!showUserDetails);
     };
 
+    const fetchChatHistory = async (chatPartnerEmail) => {
+        try {
+            console.log("Fetching chat history for:", chatPartnerEmail);
+            axios.get(`${baseURL}/chat/history/${currentUserEmail}/${chatPartnerEmail}`)
+                .then((response) => {
+                    console.log("Chat History:", response.data.data);
+                    setMessages(response.data.data);
+                })
 
-    const [message, setMessage] = useState("");
 
-    const sendMessage = () => {
-        if (!message.trim()) return;
-        setMessages([...messages, { sender: "me", text: message, time: "Now" }]);
-        setMessage("");
+        } catch (error) {
+            console.error("Error fetching chat history:", error);
+        }
     };
 
+    const handleSeletedUser = (selectedUserEmail) => {
+        setSelectedUser(selectedUserEmail);
+        fetchChatHistory(selectedUserEmail.email);
+    }
+
+    const fetchAllUsers = async () => {
+        try {
+            axios.post(`${baseURL}/getAllUsers`, { email: currentUserEmail })
+                .then((response) => {
+                    // Handle the response data here
+                    if (response.status === 200) {
+                        setUsers(response.data.data);
+                    }
+                })
+        } catch (error) {
+            console.error("Error fetching all users:", error);
+        }
+    }
+
+    useEffect(() => {
+        // console.log("Current Email: "+currentUserEmail);
+        // console.log("Current Phone: "+currentUserPhone);
+        // console.log("Current Id: "+currentUserId);
+        // console.log("Current Name: "+currentUserName);
+
+
+        if (!currentUserEmail || !currentUserName || !currentUserPhone || !currentUserId) {
+            navigate("/");
+        }
+
+        // ================== Websocket ==================
+        const socket = new SockJS(`http://localhost:8080/ws?user-email=${encodeURIComponent(currentUserEmail)}`);
+        const stompClient = new Client({
+            webSocketFactory: () => socket,
+            // debug: (str) => {
+            //     console.log(str);
+            // },
+            reconnectDelay: 5000,
+            // heartbeatIncoming: 4000,
+            // heartbeatOutgoing: 4000,
+            onConnect: () => {
+                console.log("Connected to WebSocket");
+                // Subscribe to the user-specific queue for receiving messages
+                stompClient.subscribe("/user/queue/messages", (message) => {
+                    const receivedMessage = JSON.parse(message.body);
+                    console.log("Message received: ", receivedMessage);
+                });
+            },
+        });
+        // Connect WebSocket
+        stompClient.activate();
+        setStompClient(stompClient);
+        // ================== Websocket ==================
+
+        fetchAllUsers();
+    }, [])
+
+    const sendMessage = (message, toUser) => {
+
+        if (stompClient && stompClient.connected) {
+            const msgObject = {
+                senderEmail: currentUserEmail,
+                receiverEmail: toUser.email,
+                content: message,
+                timestamp: new Date(),
+            };
+
+            stompClient.publish({
+                destination: "/app/chat",
+                body: JSON.stringify(msgObject),
+            });
+
+            setMessages([...messages, msgObject]);
+            console.log("Message sent:", msgObject);
+        } else {
+            console.error("STOMP client is not connected.");
+        }
+    };
+
+
+    const formatMessageTime = (timestamp) => {
+        const messageDate = new Date(timestamp);
+        const now = new Date();
+
+        const isToday = messageDate.toDateString() === now.toDateString();
+        const isYesterday = messageDate.toDateString() === new Date(now.setDate(now.getDate() - 1)).toDateString();
+
+        if (isToday) {
+            return messageDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        } else if (isYesterday) {
+            return "Yesterday";
+        } else {
+            return messageDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+    };
 
     return (
         <div className="flex w-full h-full p-4">
@@ -53,18 +165,22 @@ function ChatScreen() {
                 </div>
                 {/* Scrollable Chat List */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar" >
-                    {["Jessica Drew", "David Moore", "Greg James", "Emily Dorson", "Office Chat", "Little Sister", "Aditya Verma", "Shourya Verma", "Pradeep Verma", "Bindiya Verma"].map(
-                        (name, index) => (
-                            <div key={index} className={`flex ${index == 3 ? "bg-gray-100" : ""} items-center p-2 cursor-pointer`}>
+                    {users && users.length > 0 ? (users.map(
+                        (user, index) => (
+                            <div key={index} className={`flex items-center p-2 cursor-pointer`} onClick={() => handleSeletedUser(user)}>
                                 <div className="w-10 h-10 bg-blue-400 rounded-full flex items-center justify-center text-white font-bold">
-                                    {name.charAt(0)}
+                                    {user.name.charAt(0)}
                                 </div>
                                 <div className="ml-3">
-                                    <p className="text-sm font-medium">{name}</p>
+                                    <p className="text-sm font-medium">{user.name}</p>
                                     <p className="text-xs text-gray-500">Last message...</p>
                                 </div>
                             </div>
                         )
+                    )) : (
+                        <div className="flex items-center justify-center h-full text-gray-500">
+                            No users found
+                        </div>
                     )}
                 </div>
             </div>
@@ -72,21 +188,21 @@ function ChatScreen() {
             {/* Chat & User Details Container */}
             <div className="flex flex-1 bg-white border-l border-gray-300">
                 {/* Chat Section */}
-                <div className={`flex flex-col transition-all duration-300 ${showUserDetails ? "w-3/4" : "w-full"}`}>
+                {selectedUser ? (<div className={`flex flex-col transition-all duration-300 ${showUserDetails ? "w-3/4" : "w-full"}`}>
                     <div className="flex p-2 border-b border-gray-300 text-lg font-semibold cursor-pointer" onClick={toggleUserDetails}>
                         <div className="w-10 h-10 bg-blue-400 rounded-full flex items-center justify-center text-white font-bold">
-                            D
+                            {selectedUser.name.charAt(0)}
                         </div>
                         <div className="ml-2 mt-1.5">
-                            David Moore
+                            {selectedUser.name}
                         </div>
                     </div>
                     <div className="flex-1 p-4 bg-gray-200 overflow-y-auto custom-scrollbar">
                         {messages.map((msg, index) => (
-                            <div key={index} className={`flex ${msg.sender === "me" ? "justify-end" : "justify-start"} mb-2`}>
-                                <div className={`p-3 max-w-xs rounded-lg ${msg.sender === "me" ? "bg-blue-400 text-white" : "bg-white text-black"}`}>
-                                    {msg.text}
-                                    <div className="text-xs text-right opacity-70 mt-1">{msg.time}</div>
+                            <div key={index} className={`flex ${msg.senderEmail == currentUserEmail ? "justify-end" : "justify-start"} mb-2`}>
+                                <div className={`p-3 max-w-xs rounded-lg ${msg.senderEmail == currentUserEmail ? "bg-blue-400 text-white" : "bg-white text-black"}`}>
+                                    {msg.content}
+                                    <div className="text-xs text-right opacity-70 mt-1">{formatMessageTime(msg.timestamp)}</div>
                                 </div>
                             </div>
                         ))}
@@ -104,17 +220,42 @@ function ChatScreen() {
                                     e.target.style.height = "auto";
                                     e.target.style.height = Math.min(e.target.scrollHeight, 96) + "px";
                                 }}
-                                onKeyPress={(e) => e.key === "Enter" && sendMessage()}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                        e.preventDefault(); // Prevents new line
+                                        sendMessage(message, selectedUser);
+                                        setMessage(""); // Clear input after sending
+                                    }
+                                }}
                             />
-                            <button className="ml-2 text-[#a7d9f2] p-2 rounded-md" onClick={sendMessage}>
+                            <button
+                                className="ml-2 text-[#a7d9f2] p-2 rounded-md"
+                                onClick={() => {
+                                    sendMessage(message, selectedUser);
+                                    setMessage("");
+                                }}>
                                 <IoSend size={20} />
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>) : (
+                    <div className="flex flex-col items-center justify-center w-full h-full text-white bg-gray-200">
+                        <img
+                            src={ChatIcon}
+                            alt="Chat Application Logo"
+                            className="w-16 h-16 mb-4"
+                        />
+                        <div className="text-2xl text-gray-400 font-semibold">Download ChatApp for Windows</div>
+                        <p className="text-black text-sm text-center mt-2 px-6">
+                            Make calls, share your screen, and get a faster experience when you download the Windows app.
+                        </p>
+                        <p className="text-gray-500 text-xs mt-8">Your personal messages are end-to-end encrypted</p>
+                    </div>
+                )}
+
 
                 {/* User Details Panel */}
-                {showUserDetails && (
+                {showUserDetails && selectedUser && (
                     <div className="w-1/4 bg-white shadow-lg border-l border-gray-300 p-4 transition-all duration-300">
                         <button className="absolute top-6 right-6" onClick={toggleUserDetails}>
                             <IoClose size={20} />
@@ -123,9 +264,9 @@ function ChatScreen() {
                             <div className="w-30 h-30 bg-blue-400 rounded-full flex items-center justify-center text-white font-bold">
                                 D
                             </div>
-                            <h2 className="mt-2 text-lg font-bold">Daina Moore</h2>
-                            <p className="text-gray-500">+032165487924</p>
-                            <p className="text-gray-500">dianamoore@gmail.com</p>
+                            <h2 className="mt-2 text-lg font-bold">{selectedUser.name}</h2>
+                            <p className="text-gray-500">{selectedUser.phone}</p>
+                            <p className="text-gray-500">{selectedUser.email}</p>
                         </div>
                         <hr className="text-gray-300 mt-4" />
                     </div>
