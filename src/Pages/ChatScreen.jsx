@@ -14,22 +14,36 @@ import { setMessages, addMessage } from "../Redux/Slices/MessageSlice";
 
 function ChatScreen() {
 
+    // Variable for storing the current message that user is typing
     const [messageInTyping, seMessageInTyping] = useState("");
+
+    // Variables for storing the current user details
     const [showUserDetails, setShowUserDetails] = useState(false);
+
+    // Variables for storing the current messages for selected user
     const [currMessages, setCurrMessages] = useState([]);
+
+    // Variables for storing the selected user
     const [selectedUser, setSelectedUser] = useState(null);
     const selectedUserRef = useRef(selectedUser);
+
+    // Variables for storing the users list
     const [users, setUsers] = useState([]);
+
+    // Variables for storing the current stomp client
     const [currstompClient, setStompClient] = useState(null);
 
 
     const navigate = useNavigate();
     const dispatch = useDispatch();
 
+    // Backend Base URL
     const baseURL = import.meta.env.VITE_API_URL;
     let intervalId; // To track the interval
 
+    // Fetch the current user details from the Redux Store
     const { currentUserName, currentUserEmail, currentUserPhone, currentUserId } = useSelector((state) => state.user);
+    // Fetch all the messages from the Redux Store
     const { AllMessages } = useSelector((state) => state.chat);
 
 
@@ -38,18 +52,16 @@ function ChatScreen() {
         setShowUserDetails(!showUserDetails);
     };
 
+    // This function will fetch the chat history for the selected user.
     const fetchChatHistory = async (chatPartnerEmail) => {
         const filteredMessages = AllMessages.filter(
             msg => msg.senderEmail === chatPartnerEmail || msg.receiverEmail === chatPartnerEmail
         );
-
-        console.log("Number of Messages for Selected User: ", filteredMessages.length);
         setCurrMessages(filteredMessages);
     };
 
     // When a user is selected, this function will be called to set the selected user and fetch the chat history.
     const handleSeletedUser = (selectedUserEmail) => {
-        console.log("Selected User: ", selectedUserEmail);
         setSelectedUser(selectedUserEmail);
         fetchChatHistory(selectedUserEmail.email);
     }
@@ -77,7 +89,6 @@ function ChatScreen() {
             });
 
             if (response.status === 200) {
-                console.log("Here are the list of all messages:");
                 dispatch(setMessages(response.data.data));
             }
         } catch (error) {
@@ -86,89 +97,104 @@ function ChatScreen() {
     };
 
     useEffect(() => {
-        if (!currentUserEmail || !currentUserName || !currentUserPhone || !currentUserId) {
-            navigate("/");
-            return;
-        }
-
-        // Check if WebSocket is already connected
-        if (currstompClient && currstompClient.connected) {
-            console.log("WebSocket already connected. Skipping re-initialization.");
-            return;
-        }
-
-        // ================== WebSocket Connection ==================
-        const socket = new SockJS(`http://localhost:8080/ws?user-email=${encodeURIComponent(currentUserEmail)}`);
-        const stompClient = new Client({
-            webSocketFactory: () => socket,
-            reconnectDelay: 5000,
-            onConnect: () => {
-                console.log("Connected to WebSocket");
-                stompClient.subscribe(`/topic/chat-${currentUserEmail}`, (message) => {
-                    const receivedMessage = JSON.parse(message.body);
-                    if (receivedMessage.receiverEmail === currentUserEmail && receivedMessage.senderEmail === selectedUserRef.current?.email) {
-                        setCurrMessages((prevMessages) => [...prevMessages, receivedMessage]);
-                        dispatch(addMessage(receivedMessage));
-                    }
-                });
-            },
-        });
-
-        stompClient.activate();
-        setStompClient(stompClient); // Store the stomp client in state
-        fetchAllChats(currentUserEmail);
-
-        // ================== Fetch Users Every 5 Seconds ==================
-        intervalId = setInterval(fetchAllUsers, 5000);
-
-        // Cleanup function
-        return () => {
-            console.log("Disconnecting WebSocket");
-            if (stompClient) {
-                stompClient.deactivate();
+        try {
+            if (!currentUserEmail || !currentUserName || !currentUserPhone || !currentUserId) {
+                navigate("/");
+                return;
             }
-            clearInterval(intervalId);
-        };
+
+            // Check if WebSocket is already connected
+            if (currstompClient && currstompClient.connected) {
+                console.log("WebSocket already connected. Skipping re-initialization.");
+                return;
+            }
+
+
+            // ================== WebSocket Connection ==================
+            const socket = new SockJS(`http://localhost:8080/ws?user-email=${encodeURIComponent(currentUserEmail)}`);
+            const stompClient = new Client({
+                webSocketFactory: () => socket,
+                reconnectDelay: 5000,
+                onConnect: () => {
+                    console.log("Connected to WebSocket");
+                    stompClient.subscribe(`/topic/chat-${currentUserEmail}`, (message) => {
+                        const receivedMessage = JSON.parse(message.body);
+                        dispatch(addMessage(receivedMessage));
+                        if (receivedMessage.receiverEmail === currentUserEmail && receivedMessage.senderEmail === selectedUserRef.current?.email) {
+                            setCurrMessages((prevMessages) => [...prevMessages, receivedMessage]);
+                        }
+                    });
+                },
+            });
+            stompClient.activate();
+            setStompClient(stompClient); // Store the stomp client in state
+
+
+            fetchAllChats(currentUserEmail);
+
+            // ================== Fetch Users Every 5 Seconds ==================
+            intervalId = setInterval(fetchAllUsers, 5000);
+
+            // Cleanup function
+            return () => {
+                console.log("Disconnecting WebSocket");
+                if (stompClient) {
+                    stompClient.deactivate();
+                }
+                clearInterval(intervalId);
+            };
+        } catch (error) {
+            console.error("Error connecting to WebSocket:", error)
+        }
     }, [currentUserEmail]);
 
+    // Store the selected user in a ref
+    useEffect(() => {
+        selectedUserRef.current = selectedUser;
+    }, [selectedUser]);
+
+    // Function to send a message to the selected user
     const sendMessage = (message, toUser) => {
-        if (currstompClient && currstompClient.connected) {
-            const msgObject = {
-                senderEmail: currentUserEmail,
-                receiverEmail: toUser.email,
-                content: message,
-                timestamp: new Date(),
-            };
+        try {
+            if (currstompClient && currstompClient.connected) {
+                const msgObject = {
+                    senderEmail: currentUserEmail,
+                    receiverEmail: toUser.email,
+                    content: message,
+                    timestamp: Date.now(),
+                };
 
-            currstompClient.publish({
-                destination: "/app/chat",
-                body: JSON.stringify(msgObject),
-            });
+                currstompClient.publish({
+                    destination: "/app/chat",
+                    body: JSON.stringify(msgObject),
+                });
 
-            setCurrMessages((prevMessages) => [...prevMessages, msgObject]);
-            dispatch(addMessage(msgObject));
-        } else {
-            console.error("STOMP client is not connected.");
+                setCurrMessages((prevMessages) => [...prevMessages, msgObject]);
+                dispatch(addMessage(msgObject));
+            } else {
+                console.error("STOMP client is not connected.");
+            }
+        } catch (error) {
+            console.error("Error sending message:", error);
         }
     };
 
+    // Function to find the last message between the current user and the selected user
     const findLastMessage = (UserEmail) => {
-        let lastMessage =  AllMessages.findLast(
+        let lastMessage = AllMessages.findLast(
             msg =>
                 (msg.senderEmail === currentUserEmail && msg.receiverEmail === UserEmail) ||
                 (msg.senderEmail === UserEmail && msg.receiverEmail === currentUserEmail)
         ) || null; // Return null if no message is found
 
-        if(lastMessage){
+        if (lastMessage) {
             return lastMessage.content;
-        }else{
+        } else {
             return null;
         }
-        
-
     }
 
-
+    // Function to format the message time
     const formatMessageTime = (timestamp) => {
         const messageDate = new Date(timestamp);
         const now = new Date();
@@ -185,7 +211,9 @@ function ChatScreen() {
         }
     };
 
+    // Ref for the chat container
     const chatContainerRef = useRef(null);
+    // State to show the scroll button
     const [showScrollButton, setShowScrollButton] = useState(false);
 
     // Scroll to bottom when new message arrives
@@ -194,10 +222,6 @@ function ChatScreen() {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [currMessages]);
-
-    useEffect(() => {
-        selectedUserRef.current = selectedUser;
-    }, [selectedUser]);
 
     // Handle scroll event
     const handleScroll = () => {
