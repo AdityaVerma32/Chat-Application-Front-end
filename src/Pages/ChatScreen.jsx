@@ -21,7 +21,7 @@ function ChatScreen() {
     const navigate = useNavigate();
     const baseURL = import.meta.env.VITE_API_URL;
     const [users, setUsers] = useState([]);
-    const [stompClient, setStompClient] = useState(null);
+    const [currstompClient, setStompClient] = useState(null);
 
 
     const toggleUserDetails = () => {
@@ -63,14 +63,15 @@ function ChatScreen() {
     }
 
     useEffect(() => {
-        // console.log("Current Email: "+currentUserEmail);
-        // console.log("Current Phone: "+currentUserPhone);
-        // console.log("Current Id: "+currentUserId);
-        // console.log("Current Name: "+currentUserName);
-
 
         if (!currentUserEmail || !currentUserName || !currentUserPhone || !currentUserId) {
             navigate("/");
+        }
+
+        // Check if a WebSocket connection already exists
+        if (currstompClient && currstompClient.connected) {
+            console.log("WebSocket already connected. Skipping re-initialization.");
+            return;
         }
 
         // ================== Websocket ==================
@@ -86,23 +87,34 @@ function ChatScreen() {
             onConnect: () => {
                 console.log("Connected to WebSocket");
                 // Subscribe to the user-specific queue for receiving messages
-                stompClient.subscribe("/user/queue/messages", (message) => {
+                stompClient.subscribe(`/topic/chat-${currentUserEmail}`, (message) => {
                     const receivedMessage = JSON.parse(message.body);
                     console.log("Message received: ", receivedMessage);
+                    if (receivedMessage.receiverEmail == currentUserEmail) {
+
+                        setMessages((prevMessages) => [...prevMessages, receivedMessage]);
+                    }
+
                 });
             },
         });
         // Connect WebSocket
         stompClient.activate();
         setStompClient(stompClient);
-        // ================== Websocket ==================
 
         fetchAllUsers();
-    }, [])
+        return () => {  // Cleanup function
+            console.log("Disconnecting WebSocket");
+            stompClient.deactivate();
+        };
+        // ================== Websocket ==================
+
+
+    }, [currentUserEmail])
 
     const sendMessage = (message, toUser) => {
 
-        if (stompClient && stompClient.connected) {
+        if (currstompClient && currstompClient.connected) {
             const msgObject = {
                 senderEmail: currentUserEmail,
                 receiverEmail: toUser.email,
@@ -110,7 +122,7 @@ function ChatScreen() {
                 timestamp: new Date(),
             };
 
-            stompClient.publish({
+            currstompClient.publish({
                 destination: "/app/chat",
                 body: JSON.stringify(msgObject),
             });
@@ -167,7 +179,7 @@ function ChatScreen() {
                 <div className="flex-1 overflow-y-auto custom-scrollbar" >
                     {users && users.length > 0 ? (users.map(
                         (user, index) => (
-                            <div key={index} className={`flex items-center p-2 cursor-pointer`} onClick={() => handleSeletedUser(user)}>
+                            <div key={index} className={`flex items-center ${selectedUser && user.email == selectedUser.email? "bg-gray-200": ""} p-2 cursor-pointer`} onClick={() => handleSeletedUser(user)}>
                                 <div className="w-10 h-10 bg-blue-400 rounded-full flex items-center justify-center text-white font-bold">
                                     {user.name.charAt(0)}
                                 </div>
