@@ -106,11 +106,6 @@ function ChatScreen() {
                 console.log("Connected to WebSocket");
                 stompClient.subscribe(`/topic/chat-${currentUserEmail}`, (message) => {
                     const receivedMessage = JSON.parse(message.body);
-                    console.log("Receiver Email: " + receivedMessage.receiverEmail)
-                    console.log("Sender Email: " + receivedMessage.senderEmail)
-                    console.log("Current User Email: " + currentUserEmail)
-                    console.log("Current Messages: " + currMessages.length)
-                    console.log("Selected User Email: " + selectedUserRef.current?.email)
                     if (receivedMessage.receiverEmail === currentUserEmail && receivedMessage.senderEmail === selectedUserRef.current?.email) {
                         setCurrMessages((prevMessages) => [...prevMessages, receivedMessage]);
                         dispatch(addMessage(receivedMessage));
@@ -151,7 +146,7 @@ function ChatScreen() {
             });
 
             setCurrMessages((prevMessages) => [...prevMessages, msgObject]);
-            dispatch(addMessage(JSON.stringify(msgObject)));
+            dispatch(addMessage(msgObject));
         } else {
             console.error("STOMP client is not connected.");
         }
