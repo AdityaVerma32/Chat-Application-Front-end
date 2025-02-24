@@ -23,7 +23,6 @@ function Login() {
                 .then((response) => {
                     if (response.status === 200) {
                         setEmail("");
-                        console.log("Data Received: "+JSON.stringify(response.data.data));
                         dispatch(setUser(response.data.data));
                         navigate("/chat");
                     }

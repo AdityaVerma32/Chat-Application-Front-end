@@ -4,7 +4,7 @@ import messageReducer from "./Slices/MessageSlice";
 
 const rootReducer = combineReducers({
     user: userReducer,
-    message: messageReducer
+    chat: messageReducer
 })
 
 export default rootReducer;
