@@ -1,8 +1,25 @@
-# React + Vite
+# How to Compile and Run the Application
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Prerequisites
+1. **Download and Install Java 17**
+2. **Set up MySQL Database**
+   - Database name: `chatapplication`
+   - MySQL port: `3307`  
+   - If using a different port, update `application.properties` in the Spring Boot application.
+3. **Install Node.js**
+4. **Install npm**
+5. **Use React with Vite**
 
-Currently, two official plugins are available:
+## Configuration
+### React Application
+- Default port: `5173`
+- If running on a different port, update `application.properties` in the Spring Boot backend.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### Spring Boot Backend
+- Default port: `8080`
+- If running on a different port, update the `.env` file in the React frontend.
+
+
+### ENV for front end:
+
+VITE_API_URL = http://localhost:8080
